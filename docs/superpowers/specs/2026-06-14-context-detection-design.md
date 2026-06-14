@@ -252,7 +252,7 @@ Decoupling rationale: the state machine is the same code either way, and exposin
 | `sqlite3` | `;` `.` | terminator; dot-commands |
 | `redis-cli` | `:` `\` | key separators |
 
-**Deferred until function-keys design lands:** `htop`, `top`. Their real win is F1–F10, which the keybar doesn't have a slot model for yet.
+**`htop`, `top`, `mc` are covered by Fn auto-engage** (see `2026-06-14-function-keys-design.md`), not by symbol promotions. Their real win is the F-key surface, and the function-keys spec handles it via the same context-detection state machine.
 
 ---
 
@@ -261,7 +261,7 @@ Decoupling rationale: the state machine is the same code either way, and exposin
 - **Modal sub-state detection** (vim insert mode, less prompts, tmux prefix-armed). Needs scraping or per-app helper. v2.
 - **Shell-command-line aware promotions** (e.g. `kubectl`-typing detection). Needs a shell helper (preexec/DEBUG trap). v2.
 - **In-app editor for promotion sets.** v1.5.
-- **`htop` / `top` promotions.** Wait for the function-keys design.
+- ~~`htop` / `top` promotions~~ — resolved by the function-keys spec via auto-Fn engagement.
 - **Predictor consumption** of the context signal (per-context ranking). Wire is there; design when the predictor gets its next pass.
 - **Launcher consumption** of the context signal (per-context macro sorting). Same.
 - **Window pill activity badge** showing context (`vim ●`). Same.
