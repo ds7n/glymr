@@ -31,7 +31,7 @@ Out of scope (deferred):
 
 ## Posture clarification — security framing
 
-The strong security story is **storage**, not per-use friction. Identities live in iCloud Keychain (E2EE-synced) or the Secure Enclave (hardware-bound). The user-facing biometric gate is **app-level**: opening Glymr requires Face ID once per session (or once per the user's iOS unlock window — implementation detail). Once the app is open, identities with `afterUnlock` or `never` auth policies are usable silently, including during reconnects after backgrounding. The `anyUse` policy is an **opt-in escape hatch** for users who deliberately want per-operation biometric friction on specific high-value identities — it is not the recommended default and is the only path that surfaces prompts on connection wake. (This clarification will be folded into the README "Security posture" line and `brainstorming-decisions.md` "Credentials & security" table in the next doc sync.)
+The strong security story is **storage**, not per-use friction. Identities live in iCloud Keychain (E2EE-synced) or the Secure Enclave (hardware-bound). The user-facing gate is the **device unlock**. App-level Face ID is an **opt-in extra layer**, off by default — see `2026-06-16-settings-sub-screens-design.md`. Once the app is open, identities with `afterUnlock` or `never` auth policies are usable silently, including during reconnects after backgrounding. The `anyUse` policy is an **opt-in escape hatch** for users who deliberately want per-operation biometric friction on specific high-value identities — it is the only path that surfaces prompts on connection wake.
 
 ## State model
 

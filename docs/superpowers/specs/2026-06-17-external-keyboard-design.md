@@ -15,8 +15,8 @@ In-scope for v1 regardless of device class. Decided alongside [[2026-06-17-ipad-
 When a hardware keyboard is connected, the keybar **stays visible** as a **compact floating bar** docked above the home indicator. Slot subset:
 
 - Esc pill
-- Modifier slot
 - Pad
+- Modifier slot
 - Tab
 
 The rationale is reach, not capability — users have full passthrough from the hardware keyboard, but the compact bar keeps a one-handed Esc / Ctrl / arrow option for the hand not on the keyboard. The predictor strip remains above the compact bar.
@@ -51,7 +51,7 @@ iOS auto-renders the discoverability HUD when the user holds Cmd. Every shortcut
 
 | Shortcut | Action |
 |---|---|
-| ⌘T | New window (tmux window in active connection) |
+| ⌘T | New window (tmux window in active connection) — fires directly, no confirm sheet (the Esc-pill swipe-down path keeps its confirm; the chord is deliberate enough on its own) |
 | ⌘W | Close current window (confirm if last in connection) |
 | ⌘1 … ⌘9 | Switch to window N |
 | ⇧⌘[ / ⇧⌘] | Prev / next window |
@@ -72,6 +72,8 @@ iOS auto-renders the discoverability HUD when the user holds Cmd. Every shortcut
 **Mnemonic for the split aliases.** Vertical split puts a vertical divider between two side-by-side panes — `|` looks like that divider. Horizontal split puts a horizontal divider between top and bottom panes — `-` looks like that divider. Both aliases fire the same action as their `⌘D` form.
 
 **Layout note.** `⌘|` is `⇧⌘\` on US layouts. iOS's `UIKeyCommand` binds to the literal `|` character and resolves the modifier transparently, so it works the way the user sees it. Non-Latin layouts where `|` isn't on `\` still work since iOS resolves by character, not by physical key.
+
+**Relationship to the "picker is the only top-level handle" rule.** The Esc-pill picker remains the only *on-screen* affordance for Settings, host picker, and macro launcher. Hardware Cmd-shortcuts (`⌘,`, `⇧⌘N`, `⇧⌘P`, `⌘?`) are invisible to a touch user and don't violate that rule — they're the off-screen power-user equivalent of the same routes.
 
 **Convention alignment.** The map matches Blink, iTerm2, and Apple Terminal where they converge (⌘T for new window/tab, ⌘W to close, ⌘F to find, ⌘K to clear, ⌘, for settings, ⌘D for vertical split). ⇧⌘P for the launcher follows the VS Code / Sublime command-palette convention. ⇧⌘N for new connection avoids the Prompt 3 ⇧⌘F-vs-⌘F collision.
 

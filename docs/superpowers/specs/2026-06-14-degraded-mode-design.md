@@ -80,7 +80,7 @@ When degraded mode is entered at connect:
 A user with a fixed set of hosts they know don't run tmux should not be nagged forever. Two affordances:
 
 - **Auto-offer suppression:** after the banner has fired and been dismissed 2–3 times for the same host, the next banner adds a one-tap **"Suppress for this host"** action. No upfront settings menu needed.
-- **Manual override in connection settings (deferred topic):** a per-host **"Don't attempt tmux on this host"** option that skips the version-check round trip entirely and goes straight to raw PTY. For users who know the answer ahead of time.
+- **Manual override in host config:** a per-host **"Don't attempt tmux on this host"** option that skips the version-check round trip entirely and goes straight to raw PTY. For users who know the answer ahead of time. Shipped in v1 as `glymr.tmux.attemptControlMode` per [[2026-06-15-host-config-model-design]]; exposed in the host-CRUD "Glymr behavior" section per [[2026-06-15-host-crud-design]].
 
 Suppression is always **per-host**. A global "never warn me about tmux" toggle is a footgun — disable it once, six months later you're confused why a new host doesn't show pills. Per-host matches the actual mental model: "I know *this box* doesn't have tmux."
 
@@ -111,10 +111,9 @@ The control-mode channel closes unexpectedly (EOF on `-CC` stream) while the und
 
 - [[2026-06-14-context-detection-design]] — context promotions depend on `pane_current_command` via `-CC` notifications; off in degraded mode.
 - [[2026-06-14-function-keys-design]] — auto-engage in `htop`/`top`/`mc` uses context detection and is therefore off in degraded mode; manual Fn-slot toggle is input-layer and still works.
-- Connection management (deferred) — owns the per-host "Don't attempt tmux on this host" option and the suppression state for the connect-time banner.
+- Host config model — owns the per-host `glymr.tmux.attemptControlMode` field and the suppression state for the connect-time banner.
 
 ## Open questions deferred to other specs
 
 - Exact wording, color, and timing of the banners — to be tuned alongside the existing connection-status banner work in `mockups/ux-directions.html`.
-- Connection settings UI for the per-host "skip tmux check" option — belongs to the deferred **connection management** topic.
 - Whether to surface a host-level indicator anywhere outside the keybar (e.g., a small "raw" badge on the host in a future host picker) — defer to the deferred **multi-connection / host switching** topic, which is where any host-list UI will be designed.

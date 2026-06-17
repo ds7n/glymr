@@ -20,7 +20,11 @@ single reference screen the user opens when they want it.
 This trades discoverability-on-encounter for discoverability-on-curiosity. The
 bet: a user who is using a terminal client is comfortable poking around, and
 the things that are novel enough to need explanation are reachable from two
-prominent entry points.
+prominent entry points (empty state and Esc-pill picker), plus two
+secondary paths (About & Help → Tips & Gestures per
+`docs/superpowers/specs/2026-06-16-settings-sub-screens-design.md`, and the
+`⌘?` hardware shortcut per
+`docs/superpowers/specs/2026-06-17-external-keyboard-design.md`).
 
 ## Entry points
 
@@ -52,6 +56,9 @@ First-launch screen. Layout:
   buttons separated by a dim middot. No icons.
 - **Keybar is hidden.** It has nothing to act on without a session, and
   showing it inert looks broken. It appears with the first connection.
+- **Predictor strip is also hidden** in the empty state, for the same reason —
+  there is no input field to attach to. It appears with the first connection
+  alongside the keybar.
 - The empty state disappears the moment a host exists. It does not return
   when all hosts are later deleted (the host-picker handles the "no hosts"
   case in that flow — re-showing the empty state would erase user
