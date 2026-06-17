@@ -138,8 +138,9 @@ plumbing (hidden in v1), iPad single-window size-class pass.
 - **Secrets never in CloudKit** — keys/passwords/passphrases/`known_hosts` live in Keychain/SE; CloudKit holds only AES-GCM ciphertext of metadata.
 - **Conventional commits**; squash-merge to keep history clean.
 - **UUIDs internal, labels for humans** — references survive label edits.
-- **GPL-3.0-only** — every source file carries the license header; keep UniFFI's
-  MPL-2.0 file headers intact; ship `LICENSE` + `LICENSE.IOS`.
+- **GPL-3.0-only** — every source file starts with `// SPDX-License-Identifier: GPL-3.0-only`
+  then `// Copyright (C) 2026 True Positive LLC`; keep UniFFI's MPL-2.0 file
+  headers intact; ship `LICENSE` + `LICENSE.IOS`.
 - **`cargo deny check licenses`** gates every CI build — fails if any crate
   resolves to a GPL-incompatible license (e.g. an `OpenSSL`-tagged `aws-lc-sys`
   < 0.39.0 sneaking back in).
