@@ -15,10 +15,10 @@
 - **Colors:** UI/token code never inlines a hex literal outside a theme file's `private let` palette block. Palette constants verbatim from `design-tokens-design.md`.
 - **Schema fidelity:** field names are lowercase camelCase matching `ssh_config(5)` stems exactly (`hostName`, `proxyJump`, `serverAliveInterval`). Verbatim from `host-config-model-design.md`.
 - **Inheritance semantics:** `undefined` = inherit; `null`/`[]` = explicit "none." This distinction is baked in from day one (no later migration). Verbatim from `host-config-model-design.md`.
-- **License header:** every created source file (`.swift`, `.rs`) begins with these two lines verbatim:
+- **License header:** every created source file (`.swift`, `.rs`) begins with these two REUSE-compliant lines verbatim:
   ```
+  // SPDX-FileCopyrightText: 2026 True Positive LLC
   // SPDX-License-Identifier: GPL-3.0-only
-  // Copyright (C) 2026 True Positive LLC
   ```
 - **Conventional commits**; squash-merge.
 - Toolchain: install Rust targets `aarch64-apple-ios`, `aarch64-apple-ios-sim`, `x86_64-apple-ios` before Task 1.
