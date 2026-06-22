@@ -420,6 +420,7 @@ Bridge the Rust `HostKeyVerifier` callback to the evaluator and the modals; pers
 ## Deferred to Plan 2 (Host CRUD + saved-host library) — explicitly out of scope here
 
 - The full single-scrollable host editor (Basics / Auth / Connection / Jump chain / Port forwarding / Mosh / Tailscale / Glymr / Delete) per `2026-06-15-host-crud-design.md`, with conditional disabling, validation banners, and quick-edit vs deep-edit presentation.
+- The mismatch modal's **"Edit host"** action (spec §"Mismatch modal" Actions table): omitted in Plan 1's two-button modal because it opens the CRUD form built in Plan 2. Add it to `MismatchModal` when the editor exists.
 - The saved-host **list UI** (picker, swipe-to-edit/delete, refused-delete-if-referenced message), the **Defaults editor**, and the **inline identity sub-flow** (pick/create/import). Note: identity **create/import** additionally needs the Apple key-minting layer that Phase 2a deferred to 2b (`SecKeyCreateRandomKey` / Secure Enclave) — a prerequisite for that sub-tab.
 - **Settings → Security → Host fingerprints** forget-and-retry swipe (`2026-06-17-host-key-trust-design.md` §"Forget-and-retry path"). The store path already exists (`HostKeyStore.remove`); only the UI is deferred.
 - Ad-hoc (non-saved) connection identity: Plan 1 persists every typed host as a `Host` record, so there is always a UUID. Plan 2 decides whether to offer an explicit "don't save this host" path.
