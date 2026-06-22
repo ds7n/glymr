@@ -68,4 +68,13 @@ final class HostKeyTrustEvaluatorTests: XCTestCase {
         XCTAssertEqual(try ev.evaluate(hostID: h, algorithm: "rsa-sha2-512", fingerprint: "SHA256:RRR"), .trusted)
         XCTAssertEqual(Set(try store.entries(forHost: h).map(\.fingerprint)), ["SHA256:NEW", "SHA256:RRR"])
     }
+
+    func testReplaceWithNoExistingEntriesJustAddsTheKey() throws {
+        let (ev, store) = evaluator()
+        let h = UUID()
+        // No prior entry for this algorithm — replace degenerates to a plain add.
+        try ev.replace(hostID: h, algorithm: "ssh-ed25519", fingerprint: "SHA256:NEW", at: t0)
+        XCTAssertEqual(try ev.evaluate(hostID: h, algorithm: "ssh-ed25519", fingerprint: "SHA256:NEW"), .trusted)
+        XCTAssertEqual(try store.entries(forHost: h).map(\.fingerprint), ["SHA256:NEW"])
+    }
 }

@@ -51,6 +51,8 @@ public struct HostKeyTrustEvaluator {
     /// host-key rotation (the user has accepted the mismatch).
     public func replace(hostID: UUID, algorithm: String, fingerprint: String, at now: Date) throws {
         let toRemove = try store.entries(forHost: hostID).filter { $0.algorithm == algorithm }
+        // `toRemove` is pre-filtered to this algorithm, so each fingerprint passed
+        // to the store's remove(fingerprint:) belongs to this algorithm only.
         for entry in toRemove {
             try store.remove(fingerprint: entry.fingerprint, forHost: hostID)
         }
