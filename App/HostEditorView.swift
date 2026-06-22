@@ -39,6 +39,21 @@ struct HostEditorView: View {
     /// Whether the Port forwarding section is expanded.
     @State var portForwardingExpanded = false
 
+    // Task 5 — collapsible section expansion state
+    /// Whether the Mosh section is expanded.
+    @State var moshExpanded = false
+    /// Whether the Tailscale section is expanded.
+    @State var tailscaleExpanded = false
+    /// Whether the Glymr behavior section is expanded.
+    @State var glymrExpanded = false
+
+    // Task 5 — delete flow state
+    /// Whether the delete confirmation sheet is presented.
+    @State var showingDeleteConfirm = false
+    /// Non-nil when a delete was refused because the host is a referenced jumphost.
+    /// Cleared by the delete refusal banner's dismiss action.
+    @State var deleteRefusalReferrers: [HostRef]? = nil
+
     // MARK: - Init
 
     init(creating: Bool) {
@@ -79,11 +94,11 @@ struct HostEditorView: View {
                 connectionSection
                 jumpChainSection
                 portForwardingSection
-                // TODO(Task 5): Mosh section (collapsed)
-                // TODO(Task 5): Tailscale section (collapsed)
-                // TODO(Task 5): Glymr behavior section (collapsed)
+                moshSection
+                tailscaleSection
+                glymrSection
                 if !vm.isNew {
-                    // TODO(Task 5): Delete host section (edit mode)
+                    deleteSection
                 }
             }
             // Fix 2 — principal toolbar item replaces .navigationTitle for
@@ -106,6 +121,33 @@ struct HostEditorView: View {
         ) {
             Button("Discard changes", role: .destructive) { dismiss() }
             Button("Keep editing", role: .cancel) {}
+        }
+        // Task 5 — delete confirmation sheet
+        .confirmationDialog(
+            "Delete '\(vm.host.label)'?",
+            isPresented: $showingDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { performDelete() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the host config from your library. The action cannot be undone.")
+        }
+        // Task 5 — delete refusal alert (host is referenced as jumphost)
+        .alert(
+            "Cannot delete '\(vm.host.label)'.",
+            isPresented: Binding(
+                get: { deleteRefusalReferrers != nil },
+                set: { if !$0 { deleteRefusalReferrers = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) { deleteRefusalReferrers = nil }
+        } message: {
+            if let referrers = deleteRefusalReferrers {
+                let names = referrers.map { $0.label.isEmpty ? $0.id.uuidString : $0.label }
+                    .joined(separator: ", ")
+                Text("Used as jumphost by: \(names). Remove these references first.")
+            }
         }
         // Fix 1 — duplicate-label soft warning alert (save already succeeded)
         .alert(
@@ -373,7 +415,7 @@ struct HostEditorView: View {
 
     // MARK: - Expansion logic
 
-    /// Sets initial expansion for sections 3–5 per the spec's rules:
+    /// Sets initial expansion for sections 3–8 per the spec's rules:
     /// new host → all collapsed; edit → expand iff the section has a non-default value.
     /// Also applies auto-expand for any hard issue whose section should be visible.
     private func applyInitialExpansion() {
@@ -395,6 +437,15 @@ struct HostEditorView: View {
                 vm.host.localForwards.value?.isEmpty == false ||
                 vm.host.remoteForwards.value?.isEmpty == false ||
                 vm.host.dynamicForwards.value?.isEmpty == false
+
+            // Mosh: expand if mosh is explicitly configured
+            moshExpanded = vm.host.mosh != .inherit
+
+            // Tailscale: expand if tailscale is explicitly configured
+            tailscaleExpanded = vm.host.tailscale != .inherit
+
+            // Glymr: expand if glymr is explicitly configured
+            glymrExpanded = vm.host.glymr != .inherit
         }
         // Auto-expand on hard issues (also triggered live via onChange → revalidate)
         syncSectionAutoExpand()
@@ -420,6 +471,24 @@ struct HostEditorView: View {
 
         // Connection has no hard-block validation issues in v1, so it is never force-expanded here.
         // Add a block here if a Connection-scoped hard issue is introduced.
+    }
+
+    // MARK: - Delete action
+
+    /// Routes the confirmed delete through `HostStore`. On success, dismisses the
+    /// editor (the list reloads via its sheet `onDismiss`). On
+    /// `StoreError.jumpHostInUse`, sets `deleteRefusalReferrers` — the refusal
+    /// alert is presented by the `.alert` modifier above.
+    func performDelete() {
+        do {
+            try AppStores.shared.hosts.deleteHost(id: vm.host.id)
+            dismiss()
+        } catch StoreError.jumpHostInUse(let referrers) {
+            deleteRefusalReferrers = referrers
+        } catch {
+            // Unexpected store error — surface as a generic refusal banner.
+            deleteRefusalReferrers = []
+        }
     }
 
     // MARK: - Save action

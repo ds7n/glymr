@@ -7,10 +7,18 @@ import GlymrKit
 
 extension HostEditorView {
 
+    /// True when mosh is explicitly enabled on this host (`.explicit` with enabled == true).
+    /// Uses the leaf value directly — no resolution against Defaults — because the editor
+    /// works with the draft host's explicit state, not the resolved runtime value.
+    var moshEnabled: Bool {
+        vm.host.mosh.value?.enabled == true
+    }
+
     /// Connection section: Tier-2 SSH options, all `Inherited<T>`, collapsed by default.
     var connectionSection: some View {
         DisclosureGroup(isExpanded: $connectionExpanded) {
             // serverAliveInterval — Inherited<Int>
+            // Disabled when mosh is enabled (mosh has its own keepalive).
             LabeledContent {
                 TextField(
                     serverAliveIntervalPlaceholder,
@@ -25,8 +33,16 @@ extension HostEditorView {
                 Text("Keep-alive interval (s)")
                     .foregroundStyle(Color(theme.text.primary))
             }
+            .disabled(moshEnabled)
+
+            if moshEnabled {
+                Text("Mosh has its own keepalive.")
+                    .font(.caption)
+                    .foregroundStyle(Color(theme.text.secondary))
+            }
 
             // serverAliveCountMax — Inherited<Int>
+            // Disabled when mosh is enabled (mosh has its own keepalive).
             LabeledContent {
                 TextField(
                     serverAliveCountMaxPlaceholder,
@@ -40,6 +56,13 @@ extension HostEditorView {
             } label: {
                 Text("Keep-alive retries")
                     .foregroundStyle(Color(theme.text.primary))
+            }
+            .disabled(moshEnabled)
+
+            if moshEnabled {
+                Text("Mosh has its own keepalive.")
+                    .font(.caption)
+                    .foregroundStyle(Color(theme.text.secondary))
             }
 
             // compression — Inherited<Bool>: three-state Picker (Default / On / Off)
@@ -333,6 +356,285 @@ extension HostEditorView {
             Text("Port forwarding")
                 .font(.headline)
                 .foregroundStyle(Color(theme.text.primary))
+        }
+    }
+}
+
+// MARK: - Mosh section
+
+extension HostEditorView {
+
+    /// Mosh section: master enabled toggle, server path, UDP port range, prediction mode.
+    /// Collapsed by default; auto-expands on edit when `mosh` is explicitly configured.
+    var moshSection: some View {
+        DisclosureGroup(isExpanded: $moshExpanded) {
+
+            // Master enabled toggle
+            Toggle(isOn: Binding(
+                get: { vm.host.mosh.value?.enabled ?? false },
+                set: { newEnabled in
+                    // Preserve any already-set leaf values; wrap into .explicit.
+                    var cfg = vm.host.mosh.value ?? MoshConfig(enabled: false)
+                    cfg.enabled = newEnabled
+                    vm.host.mosh = .explicit(cfg)
+                    vm.revalidate()
+                }
+            )) {
+                Text("Enable Mosh")
+                    .foregroundStyle(Color(theme.text.primary))
+            }
+            .onChange(of: vm.host.mosh) { _, _ in vm.revalidate() }
+
+            if vm.host.mosh.value?.enabled == true {
+
+                // Server path — optional text
+                LabeledContent {
+                    TextField(
+                        "e.g. /usr/local/bin/mosh-server",
+                        text: Binding(
+                            get: { vm.host.mosh.value?.serverPath ?? "" },
+                            set: { newPath in
+                                var cfg = vm.host.mosh.value ?? MoshConfig(enabled: true)
+                                cfg.serverPath = newPath.isEmpty ? nil : newPath
+                                vm.host.mosh = .explicit(cfg)
+                                vm.revalidate()
+                            }
+                        )
+                    )
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                } label: {
+                    Text("Server path")
+                        .foregroundStyle(Color(theme.text.primary))
+                }
+
+                // UDP port range — lo / hi pair
+                LabeledContent {
+                    HStack(spacing: 8) {
+                        TextField(
+                            "lo",
+                            text: Binding(
+                                get: {
+                                    if let range = vm.host.mosh.value?.udpPortRange, range.count >= 2 {
+                                        return String(range[0])
+                                    }
+                                    return ""
+                                },
+                                set: { newLo in
+                                    var cfg = vm.host.mosh.value ?? MoshConfig(enabled: true)
+                                    let lo = Int(newLo) ?? 0
+                                    let existingRange = cfg.udpPortRange
+                                    let hi = (existingRange != nil && existingRange!.count >= 2) ? existingRange![1] : 0
+                                    cfg.udpPortRange = (lo > 0 || hi > 0) ? [lo, hi] : nil
+                                    vm.host.mosh = .explicit(cfg)
+                                    vm.revalidate()
+                                }
+                            )
+                        )
+                        .keyboardType(.numberPad)
+                        .frame(maxWidth: .infinity)
+
+                        Text("–")
+                            .foregroundStyle(Color(theme.text.secondary))
+
+                        TextField(
+                            "hi",
+                            text: Binding(
+                                get: {
+                                    if let range = vm.host.mosh.value?.udpPortRange, range.count >= 2 {
+                                        return String(range[1])
+                                    }
+                                    return ""
+                                },
+                                set: { newHi in
+                                    var cfg = vm.host.mosh.value ?? MoshConfig(enabled: true)
+                                    let existingRange = cfg.udpPortRange
+                                    let lo = (existingRange != nil && existingRange!.count >= 2) ? existingRange![0] : 0
+                                    let hi = Int(newHi) ?? 0
+                                    cfg.udpPortRange = (lo > 0 || hi > 0) ? [lo, hi] : nil
+                                    vm.host.mosh = .explicit(cfg)
+                                    vm.revalidate()
+                                }
+                            )
+                        )
+                        .keyboardType(.numberPad)
+                        .frame(maxWidth: .infinity)
+                    }
+                } label: {
+                    Text("UDP port range")
+                        .foregroundStyle(Color(theme.text.primary))
+                }
+
+                // Prediction mode — Picker over 4 cases (nil = inherit/default)
+                Picker(selection: Binding(
+                    get: { vm.host.mosh.value?.predictionMode },
+                    set: { newMode in
+                        var cfg = vm.host.mosh.value ?? MoshConfig(enabled: true)
+                        cfg.predictionMode = newMode
+                        vm.host.mosh = .explicit(cfg)
+                        vm.revalidate()
+                    }
+                )) {
+                    Text("Default").tag(MoshPredictionMode?.none)
+                    Text("Adaptive").tag(MoshPredictionMode?.some(.adaptive))
+                    Text("Always").tag(MoshPredictionMode?.some(.always))
+                    Text("Never").tag(MoshPredictionMode?.some(.never))
+                    Text("Experimental").tag(MoshPredictionMode?.some(.experimental))
+                } label: {
+                    Text("Prediction mode")
+                        .foregroundStyle(Color(theme.text.primary))
+                }
+            }
+
+        } label: {
+            Text("Mosh")
+                .font(.headline)
+                .foregroundStyle(Color(theme.text.primary))
+        }
+    }
+}
+
+// MARK: - Tailscale section
+
+extension HostEditorView {
+
+    /// Tailscale section: required toggle; tailnet text field when required.
+    /// Collapsed by default; auto-expands on edit when `tailscale` is explicitly configured.
+    var tailscaleSection: some View {
+        DisclosureGroup(isExpanded: $tailscaleExpanded) {
+
+            // Caveat banner when tailscale.required is on
+            if vm.host.tailscale.value?.required == true {
+                IssueBanner(
+                    message: "Connection refused with a 'Tailscale required' banner when Tailscale is disconnected.",
+                    severity: .softBlock
+                )
+            }
+
+            // Required toggle
+            Toggle(isOn: Binding(
+                get: { vm.host.tailscale.value?.required ?? false },
+                set: { newRequired in
+                    var cfg = vm.host.tailscale.value ?? TailscaleConfig(required: false)
+                    cfg.required = newRequired
+                    vm.host.tailscale = .explicit(cfg)
+                    vm.revalidate()
+                }
+            )) {
+                Text("Tailscale required")
+                    .foregroundStyle(Color(theme.text.primary))
+            }
+            .onChange(of: vm.host.tailscale) { _, _ in vm.revalidate() }
+
+            // Tailnet — only visible when required is on
+            if vm.host.tailscale.value?.required == true {
+                LabeledContent {
+                    TextField(
+                        "e.g. mycompany.ts.net",
+                        text: Binding(
+                            get: { vm.host.tailscale.value?.tailnet ?? "" },
+                            set: { newTailnet in
+                                var cfg = vm.host.tailscale.value ?? TailscaleConfig(required: true)
+                                cfg.tailnet = newTailnet.isEmpty ? nil : newTailnet
+                                vm.host.tailscale = .explicit(cfg)
+                                vm.revalidate()
+                            }
+                        )
+                    )
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                } label: {
+                    Text("Tailnet")
+                        .foregroundStyle(Color(theme.text.primary))
+                }
+            }
+
+        } label: {
+            Text("Tailscale")
+                .font(.headline)
+                .foregroundStyle(Color(theme.text.primary))
+        }
+    }
+}
+
+// MARK: - Glymr behavior section
+
+extension HostEditorView {
+
+    /// Glymr behavior section: predictor incognito and tmux control mode toggles.
+    /// Collapsed by default; auto-expands on edit when `glymr` is explicitly configured.
+    var glymrSection: some View {
+        DisclosureGroup(isExpanded: $glymrExpanded) {
+
+            // Predictor incognito — default false per resolution
+            Toggle(isOn: Binding(
+                get: { vm.host.glymr.value?.predictor?.incognito ?? false },
+                set: { newIncognito in
+                    var cfg = vm.host.glymr.value ?? GlymrConfig()
+                    var predictor = cfg.predictor ?? PredictorConfig()
+                    predictor.incognito = newIncognito
+                    cfg.predictor = predictor
+                    vm.host.glymr = .explicit(cfg)
+                    vm.revalidate()
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Predictor incognito")
+                        .foregroundStyle(Color(theme.text.primary))
+                    Text("Don't learn from this session's output.")
+                        .font(.caption)
+                        .foregroundStyle(Color(theme.text.secondary))
+                }
+            }
+            .onChange(of: vm.host.glymr) { _, _ in vm.revalidate() }
+
+            // Tmux control mode — default true per resolution
+            Toggle(isOn: Binding(
+                get: { vm.host.glymr.value?.tmux?.attemptControlMode ?? true },
+                set: { newAttempt in
+                    var cfg = vm.host.glymr.value ?? GlymrConfig()
+                    var tmux = cfg.tmux ?? TmuxConfig()
+                    tmux.attemptControlMode = newAttempt
+                    cfg.tmux = tmux
+                    vm.host.glymr = .explicit(cfg)
+                    vm.revalidate()
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Attempt tmux control mode")
+                        .foregroundStyle(Color(theme.text.primary))
+                    Text("Automatically use tmux -CC if tmux is running (default on).")
+                        .font(.caption)
+                        .foregroundStyle(Color(theme.text.secondary))
+                }
+            }
+
+        } label: {
+            Text("Glymr behavior")
+                .font(.headline)
+                .foregroundStyle(Color(theme.text.primary))
+        }
+    }
+}
+
+// MARK: - Delete section
+
+extension HostEditorView {
+
+    /// Delete host row — edit mode only. Destructive styling; tapping opens the
+    /// confirmation sheet managed in `HostEditorView.body`.
+    var deleteSection: some View {
+        Section {
+            Button(role: .destructive) {
+                showingDeleteConfirm = true
+            } label: {
+                HStack {
+                    Spacer()
+                    Text("Delete host")
+                        .foregroundStyle(Color(theme.state.broken))
+                    Spacer()
+                }
+            }
         }
     }
 }
