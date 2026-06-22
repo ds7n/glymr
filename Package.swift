@@ -17,6 +17,8 @@ var targets: [Target] = [
     .testTarget(name: "SeedKitTests", dependencies: ["SeedKit"]),
 ]
 
+var products: [Product] = [.library(name: "GlymrKit", targets: ["GlymrKit"])]
+
 // The UniFFI XCFramework exists only on Apple platforms; never reference it on Linux.
 #if os(macOS)
 targets += [
@@ -24,12 +26,14 @@ targets += [
     .binaryTarget(name: "GlymrSSHCore", path: "GlymrSSHCore.xcframework"),
     .testTarget(name: "BridgeTests", dependencies: ["GlymrSSHCoreFFI"]),
 ]
+// Expose the UniFFI bridge module as a product so the iOS app target can link it.
+products += [.library(name: "GlymrSSHCoreFFI", targets: ["GlymrSSHCoreFFI"])]
 #endif
 
 let package = Package(
     name: "Glymr",
     platforms: [.iOS(.v17), .macOS(.v14)],
-    products: [.library(name: "GlymrKit", targets: ["GlymrKit"])],
+    products: products,
     dependencies: [
         .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
     ],
