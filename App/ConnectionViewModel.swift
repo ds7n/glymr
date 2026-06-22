@@ -45,7 +45,7 @@ final class ConnectionViewModel: ObservableObject {
     /// Find an existing saved host matching (hostName, user) or create + persist one.
     private func findOrCreateHost(hostName: String, port: Int, user: String) throws -> Host {
         let existing = try AppStores.shared.hosts.allHosts()
-            .first { $0.hostName == hostName && $0.user.value == user }
+            .first { $0.hostName == hostName && ($0.port.value ?? 22) == port && $0.user.value == user }
         if let existing { return existing }
         let host = Host(id: UUID(), label: hostName, hostName: hostName,
                         user: .explicit(user), port: .explicit(port))
