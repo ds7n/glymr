@@ -82,7 +82,7 @@ final class ConnectionViewModel: ObservableObject {
                 connection = conn
                 session = sess
                 state = .shell
-            } catch ConnectError.hostKeyRejected {
+            } catch ConnectError.HostKeyRejected {
                 state = .failed("Host key not trusted")
             } catch {
                 state = .failed(String(describing: error))
