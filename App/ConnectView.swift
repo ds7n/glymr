@@ -59,6 +59,8 @@ struct ConnectView: View {
             }
             .navigationTitle("Glymr")
         }
+        // The prompt sheet rides the connect form; `state` only becomes
+        // `.shell` after `verify` has resolved, so the sheet is never orphaned.
         .sheet(item: $vm.pendingPrompt) { prompt in
             switch prompt {
             case let .firstTrust(hostLabel, keyType, offered):

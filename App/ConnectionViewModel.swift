@@ -24,9 +24,12 @@ final class ConnectionViewModel: ObservableObject {
     /// Shared output sink; the terminal view wires `onBytes` to render into itself.
     let output = TerminalShellOutput()
 
-    /// Show a host-key modal and suspend until the user decides.
+    /// Show a host-key modal and suspend until the user decides. One prompt is
+    /// in flight per handshake; if a stale continuation somehow remains, resolve
+    /// it as rejected (the safe direction) rather than leaking its task.
     func present(_ prompt: HostKeyPrompt) async -> Bool {
         await withCheckedContinuation { cont in
+            promptContinuation?.resume(returning: false)
             promptContinuation = cont
             pendingPrompt = prompt
         }
