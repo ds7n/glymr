@@ -368,9 +368,11 @@ private struct JumpHopRow: View {
                     get: { isRefMode },
                     set: { wantsRef in
                         if wantsRef {
-                            // Switch to ref mode; default to nil UUID sentinel
-                            // (user must pick from Picker below)
-                            hop = .ref(hostId: UUID())
+                            // Pre-select the first eligible (non-self) saved host so the
+                            // Picker is never pointing at an arbitrary/invalid UUID.
+                            let allHosts = (try? AppStores.shared.hosts.allHosts()) ?? []
+                            let firstEligible = allHosts.first { $0.id != editingHostId }
+                            hop = .ref(hostId: firstEligible?.id ?? UUID())
                         } else {
                             hop = .inline(hostName: "", port: nil, user: nil, identities: nil)
                         }
@@ -408,6 +410,7 @@ private struct JumpHopRow: View {
     /// Picker over all saved hosts except the one being edited.
     @ViewBuilder
     private var refModeContent: some View {
+        // TODO(perf): allHosts() is re-fetched on every render; cache in the view model and observe store changes.
         let savedHosts: [GlymrKit.Host] = (try? AppStores.shared.hosts.allHosts())
             ?? []
         let eligible = savedHosts.filter { $0.id != editingHostId }

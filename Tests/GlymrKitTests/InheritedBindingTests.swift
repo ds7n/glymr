@@ -137,6 +137,11 @@ final class InheritedBindingTests: XCTestCase {
         XCTAssertEqual(selectionToInheritedBool(inheritedBoolToSelection(.explicit(false))), .explicit(false))
     }
 
+    /// `.explicit(nil)` has no distinct Picker representation; it collapses to `.inherit` on round-trip — intentional.
+    func testBoolExplicitNilRoundTripCollapsesToInherit() {
+        XCTAssertEqual(selectionToInheritedBool(inheritedBoolToSelection(.explicit(nil))), .inherit)
+    }
+
     /// Three-state discipline: explicit(false) must not collapse to inherit.
     func testExplicitFalseIsDistinctFromInherit() {
         let fromFalse = selectionToInheritedBool(inheritedBoolToSelection(.explicit(false)))
@@ -178,6 +183,11 @@ final class InheritedBindingTests: XCTestCase {
 
     func testSHKCSelectionYesBecomesExplicitYes() {
         XCTAssertEqual(selectionToInheritedSHKC(.yes), .explicit(.yes))
+    }
+
+    /// `.explicit(nil)` has no distinct Picker representation; it collapses to `.inherit` on round-trip — intentional.
+    func testSHKCExplicitNilRoundTripCollapsesToInherit() {
+        XCTAssertEqual(selectionToInheritedSHKC(inheritedSHKCToSelection(.explicit(nil))), .inherit)
     }
 
     func testSHKCRoundTripInherit() {
@@ -227,6 +237,11 @@ final class InheritedBindingTests: XCTestCase {
         // Input order irrelevant; output must be canonical: publicKey, password, keyboardInteractive.
         let result = selectionToInheritedAuthMethods(Set([.keyboardInteractive, .publicKey, .password]))
         XCTAssertEqual(result, .explicit([.publicKey, .password, .keyboardInteractive]))
+    }
+
+    /// `.explicit(nil)` has no distinct Picker representation; it collapses to `.inherit` on round-trip — intentional.
+    func testAuthMethodsExplicitNilRoundTripCollapsesToInherit() {
+        XCTAssertEqual(selectionToInheritedAuthMethods(inheritedAuthMethodsToSelection(.explicit(nil))), .inherit)
     }
 
     func testAuthMethodsRoundTripInherit() {

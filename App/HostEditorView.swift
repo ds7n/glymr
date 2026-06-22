@@ -417,6 +417,9 @@ struct HostEditorView: View {
             return false
         }
         if hasPortIssue { portForwardingExpanded = true }
+
+        // Connection has no hard-block validation issues in v1, so it is never force-expanded here.
+        // Add a block here if a Connection-scoped hard issue is introduced.
     }
 
     // MARK: - Save action
