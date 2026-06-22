@@ -36,7 +36,8 @@ final class HostFormValidationTests: XCTestCase {
     func testInlineJumpHostEmptyHostNameIsHardBlockWithIndex() {
         let host = h("p", jump: [.inline(hostName: "", port: 22, user: nil, identities: nil)])
         let issues = validateHostForm(host, others: [], defaults: Defaults(), passwordRefResolves: true)
-        XCTAssertTrue(issues.contains { $0.kind == .inlineJumpHostMissingHostName(index: 0) })
+        XCTAssertTrue(issues.contains { $0.kind == .inlineJumpHostMissingHostName(index: 0) && $0.severity == .hardBlock })
+        XCTAssertFalse(canSave(issues))
     }
 
     func testDuplicateLabelIsSoftBlockAndStillSavable() {
@@ -69,6 +70,23 @@ final class HostFormValidationTests: XCTestCase {
         var host = h()
         host.localForwards = .explicit([LocalForward(bindAddress: nil, bindPort: 0, hostAddress: "", hostPort: 0)])
         let issues = validateHostForm(host, others: [], defaults: Defaults(), passwordRefResolves: true)
-        XCTAssertTrue(issues.contains { $0.kind == .localForwardMissingField(index: 0) })
+        XCTAssertTrue(issues.contains { $0.kind == .localForwardMissingField(index: 0) && $0.severity == .hardBlock })
+        XCTAssertFalse(canSave(issues))
+    }
+
+    func testRemoteForwardMissingFieldIsHardBlock() {
+        var host = h()
+        host.remoteForwards = .explicit([RemoteForward(bindAddress: nil, bindPort: 0, hostAddress: "", hostPort: 0)])
+        let issues = validateHostForm(host, others: [], defaults: Defaults(), passwordRefResolves: true)
+        XCTAssertTrue(issues.contains { $0.kind == .remoteForwardMissingField(index: 0) && $0.severity == .hardBlock })
+        XCTAssertFalse(canSave(issues))
+    }
+
+    func testDynamicForwardMissingFieldIsHardBlock() {
+        var host = h()
+        host.dynamicForwards = .explicit([DynamicForward(bindAddress: nil, bindPort: 0)])
+        let issues = validateHostForm(host, others: [], defaults: Defaults(), passwordRefResolves: true)
+        XCTAssertTrue(issues.contains { $0.kind == .dynamicForwardMissingField(index: 0) && $0.severity == .hardBlock })
+        XCTAssertFalse(canSave(issues))
     }
 }
