@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 True Positive LLC
 // SPDX-License-Identifier: GPL-3.0-only
 import SwiftUI
+import SwiftTerm
 import GlymrKit
 import GlymrSSHCoreFFI
 
@@ -21,6 +22,11 @@ final class ConnectionViewModel: ObservableObject {
     /// Non-nil when we fell back from control mode; consumed by Task 6 to show
     /// an amber banner explaining why tmux wasn't used.
     @Published var degraded: DegradeReason?
+    /// Non-nil while attached to tmux control mode; nil in raw-PTY mode.
+    @Published var tmuxState: TmuxSessionState?
+    /// PaneID → live SwiftTerm view, populated by TmuxPaneContainer as panes appear.
+    private var paneViews: [PaneID: TerminalView] = [:]
+    private var pendingPaneBytes: [PaneID: [UInt8]] = [:]   // bytes that arrived before the view registered
 
     private var promptContinuation: CheckedContinuation<Bool, Never>?
 
@@ -62,6 +68,30 @@ final class ConnectionViewModel: ObservableObject {
             let sess = session
             Task { try? await sess?.write(data: Data(bytes)) }
         }
+    }
+
+    // MARK: - Pane registry + tmux commands
+
+    /// Called by TmuxPaneContainer when a pane's view is created. Flushes any
+    /// bytes that arrived before the view existed.
+    func registerPane(_ pane: PaneID, _ view: TerminalView) {
+        paneViews[pane] = view
+        if let buffered = pendingPaneBytes[pane] {
+            view.feed(byteArray: buffered[...]); pendingPaneBytes[pane] = nil
+        }
+    }
+
+    func unregisterPane(_ pane: PaneID) { paneViews[pane] = nil; pendingPaneBytes[pane] = nil }
+
+    func selectWindow(_ id: WindowID) { tmux?.selectWindow(id) }
+
+    func setTmuxClientSize(cols: Int, rows: Int) { tmux?.setClientSize(cols: cols, rows: rows) }
+
+    /// Convert the container's pixel size to an approximate cell grid and push it
+    /// to tmux so it re-tiles. ~8×16pt per cell for the default monospace font.
+    func sendApproxClientSize(width: Double, height: Double) {
+        let cols = max(1, Int(width / 8.0)); let rows = max(1, Int(height / 16.0))
+        setTmuxClientSize(cols: cols, rows: rows)
     }
 
     // MARK: - Auth
@@ -138,6 +168,7 @@ final class ConnectionViewModel: ObservableObject {
             term: "xterm-256color", cols: 80, rows: 24, output: output)
         connection = conn
         session = sess
+        tmuxState = nil   // raw mode: single-terminal path
         state = .shell
     }
 
@@ -151,10 +182,16 @@ final class ConnectionViewModel: ObservableObject {
             try await openRawShell(conn: conn)
             return
         }
-        runtime.onActivePaneBytes = { [weak self] bytes in self?.output.onBytes?(bytes) }
-        runtime.onExit = { [weak self] reason in
-            self?.state = .failed(reason ?? "tmux session ended")
+        runtime.onPaneBytes = { [weak self] pane, bytes in
+            guard let self else { return }
+            if let view = self.paneViews[pane] {
+                view.feed(byteArray: bytes[...])
+            } else {
+                self.pendingPaneBytes[pane, default: []].append(contentsOf: bytes)
+            }
         }
+        runtime.onStateChanged = { [weak self] state in self?.tmuxState = state }
+        runtime.onExit = { [weak self] reason in self?.state = .failed(reason ?? "tmux session ended") }
         let sink = TerminalShellOutput()
         sink.onBytes = { [weak runtime] bytes in runtime?.ingest(bytes) }
         sink.onExit = { [weak self] exit in
