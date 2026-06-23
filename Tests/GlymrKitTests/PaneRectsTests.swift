@@ -42,6 +42,8 @@ final class PaneRectsTests: XCTestCase {
         let layout = PaneLayout.columns([leftCol, right], Geometry(w: 80, h: 24, x: 0, y: 0))
         let rects = paneRects(in: layout, cellWidth: cw, cellHeight: ch)
         XCTAssertEqual(rects.map(\.pane), [PaneID(raw: 1), PaneID(raw: 2), PaneID(raw: 3)])
+        XCTAssertEqual(rects[0], PaneRect(pane: PaneID(raw: 1), x: 0, y: 0,   width: 320, height: 192))
+        XCTAssertEqual(rects[1], PaneRect(pane: PaneID(raw: 2), x: 0, y: 208, width: 320, height: 176))
         XCTAssertEqual(rects[2], PaneRect(pane: PaneID(raw: 3), x: 328, y: 0, width: 312, height: 384))
     }
 }
