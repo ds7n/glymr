@@ -35,8 +35,12 @@ pub enum KeyError {
 fn algorithm_tag(alg: &Algorithm) -> Option<&'static str> {
     match alg {
         Algorithm::Ed25519 => Some("ed25519"),
-        Algorithm::Ecdsa { curve: EcdsaCurve::NistP256 } => Some("ecdsa-p256"),
-        Algorithm::Ecdsa { curve: EcdsaCurve::NistP384 } => Some("ecdsa-p384"),
+        Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP256,
+        } => Some("ecdsa-p256"),
+        Algorithm::Ecdsa {
+            curve: EcdsaCurve::NistP384,
+        } => Some("ecdsa-p384"),
         Algorithm::Rsa { .. } => Some("rsa"),
         _ => None,
     }
@@ -45,16 +49,21 @@ fn algorithm_tag(alg: &Algorithm) -> Option<&'static str> {
 /// Builds `KeyMaterial` from a decrypted `PrivateKey`, rejecting unmodeled algorithms.
 fn material(key: &PrivateKey) -> Result<KeyMaterial, KeyError> {
     let alg = key.algorithm();
-    let tag = algorithm_tag(&alg)
-        .ok_or_else(|| KeyError::UnsupportedAlgorithm { algorithm: alg.to_string() })?;
+    let tag = algorithm_tag(&alg).ok_or_else(|| KeyError::UnsupportedAlgorithm {
+        algorithm: alg.to_string(),
+    })?;
     let private = key
         .to_openssh(LineEnding::LF)
-        .map_err(|e| KeyError::Generation { message: e.to_string() })?
+        .map_err(|e| KeyError::Generation {
+            message: e.to_string(),
+        })?
         .to_string();
     let public = key
         .public_key()
         .to_openssh()
-        .map_err(|e| KeyError::Generation { message: e.to_string() })?;
+        .map_err(|e| KeyError::Generation {
+            message: e.to_string(),
+        })?;
     let fingerprint = key.fingerprint(HashAlg::Sha256).to_string();
     Ok(KeyMaterial {
         private_key_openssh: private,
@@ -66,21 +75,30 @@ fn material(key: &PrivateKey) -> Result<KeyMaterial, KeyError> {
 
 #[uniffi::export]
 pub fn mint_ed25519_identity() -> Result<KeyMaterial, KeyError> {
-    let key = PrivateKey::random(&mut UnwrapErr(SysRng), Algorithm::Ed25519)
-        .map_err(|e| KeyError::Generation { message: e.to_string() })?;
+    let key = PrivateKey::random(&mut UnwrapErr(SysRng), Algorithm::Ed25519).map_err(|e| {
+        KeyError::Generation {
+            message: e.to_string(),
+        }
+    })?;
     material(&key)
 }
 
 #[uniffi::export]
-pub fn import_private_key(openssh: String, passphrase: Option<String>) -> Result<KeyMaterial, KeyError> {
-    let key = PrivateKey::from_openssh(openssh.as_bytes())
-        .map_err(|e| KeyError::Parse { message: e.to_string() })?;
+pub fn import_private_key(
+    openssh: String,
+    passphrase: Option<String>,
+) -> Result<KeyMaterial, KeyError> {
+    let key = PrivateKey::from_openssh(openssh.as_bytes()).map_err(|e| KeyError::Parse {
+        message: e.to_string(),
+    })?;
     let decrypted = if key.is_encrypted() {
         let pass = passphrase.ok_or_else(|| KeyError::Decrypt {
             message: "passphrase required for an encrypted key".to_string(),
         })?;
         key.decrypt(pass.as_bytes())
-            .map_err(|e| KeyError::Decrypt { message: e.to_string() })?
+            .map_err(|e| KeyError::Decrypt {
+                message: e.to_string(),
+            })?
     } else {
         key
     };
@@ -103,7 +121,10 @@ mod tests {
         assert_eq!(m.algorithm, "ed25519");
         let parts: Vec<&str> = m.public_key_openssh.split_whitespace().collect();
         assert_eq!(parts.first(), Some(&"ssh-ed25519")); // exact algo field, not a prefix
-        assert!(parts.len() >= 2, "public key must have an algo + base64 body");
+        assert!(
+            parts.len() >= 2,
+            "public key must have an algo + base64 body"
+        );
         assert!(parts[1].starts_with("AAAA"), "base64 body present");
         // The minted private key parses back and yields the SAME public + fingerprint.
         let reparsed = import_private_key(m.private_key_openssh.clone(), None).expect("reparse");
@@ -154,7 +175,12 @@ mod tests {
         // DSA has never been modeled in Glymr.
         assert_eq!(algorithm_tag(&Algorithm::Dsa), None);
         // P-521 is not modeled (russh 0.61 client can't verify p521 host certs either).
-        assert_eq!(algorithm_tag(&Algorithm::Ecdsa { curve: EcdsaCurve::NistP521 }), None);
+        assert_eq!(
+            algorithm_tag(&Algorithm::Ecdsa {
+                curve: EcdsaCurve::NistP521
+            }),
+            None
+        );
     }
 
     const P521_FIXTURE: &str = include_str!("../tests/fixtures/ecdsa_p521_test_key");
@@ -171,8 +197,7 @@ mod tests {
     /// Generates an in-test passphrase-encrypted ed25519 key (`hunter2`) in
     /// OpenSSH format, so the encrypted-import cases need no committed secret.
     fn encrypted_fixture() -> String {
-        let key = PrivateKey::random(
-            &mut UnwrapErr(SysRng), Algorithm::Ed25519).unwrap();
+        let key = PrivateKey::random(&mut UnwrapErr(SysRng), Algorithm::Ed25519).unwrap();
         key.encrypt(&mut SysRng, b"hunter2")
             .unwrap()
             .to_openssh(LineEnding::LF)
