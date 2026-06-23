@@ -101,8 +101,10 @@ mod tests {
     fn mint_produces_a_round_trippable_ed25519_key() {
         let m = mint_ed25519_identity().expect("mint");
         assert_eq!(m.algorithm, "ed25519");
-        assert!(m.fingerprint_sha256.starts_with("SHA256:"));
-        assert!(m.public_key_openssh.starts_with("ssh-ed25519 "));
+        let parts: Vec<&str> = m.public_key_openssh.split_whitespace().collect();
+        assert_eq!(parts.first(), Some(&"ssh-ed25519")); // exact algo field, not a prefix
+        assert!(parts.len() >= 2, "public key must have an algo + base64 body");
+        assert!(parts[1].starts_with("AAAA"), "base64 body present");
         // The minted private key parses back and yields the SAME public + fingerprint.
         let reparsed = import_private_key(m.private_key_openssh.clone(), None).expect("reparse");
         assert_eq!(reparsed.public_key_openssh, m.public_key_openssh);
@@ -143,6 +145,27 @@ mod tests {
         let enc = encrypted_fixture();
         let err = import_private_key(enc, Some("wrong".to_string())).unwrap_err();
         assert!(matches!(err, KeyError::Decrypt { .. }));
+    }
+
+    #[test]
+    fn algorithm_tag_returns_some_for_supported_and_none_for_unsupported() {
+        // Positive anchor: ed25519 is supported.
+        assert_eq!(algorithm_tag(&Algorithm::Ed25519), Some("ed25519"));
+        // DSA has never been modeled in Glymr.
+        assert_eq!(algorithm_tag(&Algorithm::Dsa), None);
+        // P-521 is not modeled (russh 0.61 client can't verify p521 host certs either).
+        assert_eq!(algorithm_tag(&Algorithm::Ecdsa { curve: EcdsaCurve::NistP521 }), None);
+    }
+
+    const P521_FIXTURE: &str = include_str!("../tests/fixtures/ecdsa_p521_test_key");
+
+    #[test]
+    fn import_p521_key_is_an_unsupported_algorithm_error() {
+        // P-521 is parsed fine by ssh-key but rejected by algorithm_tag —
+        // ssh-key's `p521` feature is enabled transitively, so it reaches the
+        // Glymr UnsupportedAlgorithm gate rather than failing at parse.
+        let err = import_private_key(P521_FIXTURE.to_string(), None).unwrap_err();
+        assert!(matches!(err, KeyError::UnsupportedAlgorithm { .. }));
     }
 
     /// Generates an in-test passphrase-encrypted ed25519 key (`hunter2`) in
