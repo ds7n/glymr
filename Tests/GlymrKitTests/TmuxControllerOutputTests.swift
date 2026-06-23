@@ -17,7 +17,7 @@ final class TmuxControllerOutputTests: XCTestCase {
 
         XCTAssertEqual(out.paneOutput.count, 1)
         XCTAssertEqual(out.paneOutput.first?.pane, PaneID(raw: 1))
-        XCTAssertEqual(out.paneOutput.first?.data.map { $0 }, Array("hi".utf8))
+        XCTAssertEqual(out.paneOutput.first?.data, Array("hi".utf8))
     }
 
     /// A feed with no %output yields an empty paneOutput (not nil, not garbage).
