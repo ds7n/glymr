@@ -31,8 +31,10 @@ struct SessionView: View {
 
     var body: some View {
         Group {
-            if case .shell = vm.state, let session = vm.session {
-                TerminalScreen(session: session, output: vm.output)
+            if case .shell = vm.state {
+                TerminalScreen(send: { [weak vm] bytes in vm?.sendTerminalInput(bytes) },
+                               output: vm.output,
+                               session: vm.session)
                     .ignoresSafeArea(.container, edges: .bottom)
             } else if resolving {
                 // Resolution not yet run — show a neutral spinner with no label
