@@ -36,6 +36,9 @@ final class TmuxLaunchTests: XCTestCase {
         let hex = name.dropFirst("glymr-".count)
         XCTAssertEqual(hex.count, 8)
         XCTAssertTrue(hex.allSatisfy { "0123456789abcdef".contains($0) })
+        // Pin the exact digest so an algorithm swap (SHA-1/MD5) would fail:
+        // SHA-256("device-abc") first 8 hex chars.
+        XCTAssertEqual(name, "glymr-068c3bfd")
         XCTAssertEqual(tmuxSessionName(seed: "device-abc"), name)             // deterministic
         XCTAssertNotEqual(tmuxSessionName(seed: "device-xyz"), name)          // seed-sensitive
     }
