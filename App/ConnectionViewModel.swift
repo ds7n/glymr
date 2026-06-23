@@ -27,6 +27,9 @@ final class ConnectionViewModel: ObservableObject {
     /// PaneID → live SwiftTerm view, populated by TmuxPaneContainer as panes appear.
     private var paneViews: [PaneID: TerminalView] = [:]
     private var pendingPaneBytes: [PaneID: [UInt8]] = [:]   // bytes that arrived before the view registered
+    /// Panes that currently exist in the active window's visible layout.
+    /// Bytes for panes NOT in this set are dropped rather than buffered (bounds memory).
+    private var renderablePanes: Set<PaneID> = []
 
     private var promptContinuation: CheckedContinuation<Bool, Never>?
 
@@ -186,11 +189,20 @@ final class ConnectionViewModel: ObservableObject {
             guard let self else { return }
             if let view = self.paneViews[pane] {
                 view.feed(byteArray: bytes[...])
-            } else {
+            } else if self.renderablePanes.contains(pane) {
                 self.pendingPaneBytes[pane, default: []].append(contentsOf: bytes)
             }
+            // else: pane not in visible layout — drop to prevent unbounded buffering
         }
-        runtime.onStateChanged = { [weak self] state in self?.tmuxState = state }
+        runtime.onStateChanged = { [weak self] state in
+            guard let self else { return }
+            let live = Set(
+                (state.activeWindow.flatMap { state.window($0) }?.visibleLayout?.panes.map(\.pane)) ?? []
+            )
+            self.renderablePanes = live
+            self.pendingPaneBytes = self.pendingPaneBytes.filter { live.contains($0.key) }
+            self.tmuxState = state
+        }
         runtime.onExit = { [weak self] reason in self?.state = .failed(reason ?? "tmux session ended") }
         let sink = TerminalShellOutput()
         sink.onBytes = { [weak runtime] bytes in runtime?.ingest(bytes) }
