@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 import Foundation
 import GlymrKit
+import GlymrSSHCoreFFI
 
 /// Drives a tmux control-mode session in the app: feeds inbound channel bytes to
 /// the pure `TmuxSessionController`, forwards the active pane's output to the
