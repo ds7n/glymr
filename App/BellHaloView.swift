@@ -3,7 +3,7 @@
 import UIKit
 import NeotildeKit
 
-/// Renders a pulsed border-glow overlay for the visual bell. Place as a
+/// Renders a pulsed inset-glow overlay for the visual bell. Place as a
 /// full-frame subview over the terminal/pane view; it is transparent when idle.
 ///
 /// Drive pattern:
@@ -12,22 +12,36 @@ import NeotildeKit
 ///    `start(machine:)` — this arms/restarts the `CADisplayLink`.
 /// 3. The display link self-terminates when `intensity` reaches 0.
 ///
-/// The view draws an inset border using `CALayer.borderColor` + `CALayer.borderWidth`.
-/// `alpha` is applied on top so the glow fades smoothly without re-rendering the
-/// layer border geometry each frame.
+/// The glow is drawn on a `CALayer` sublayer inset `borderInset` points from
+/// each edge. The sublayer uses `borderWidth` + rounded corners + a matching
+/// shadow to produce a soft "inner glow" that is visually distinct from the
+/// 1.5pt hairline focus border on the parent `TerminalView`. `alpha` is applied
+/// on the outer view so the glow fades each frame without re-layout.
 ///
-/// UIKit/macOS assumption: `CADisplayLink` is available in UIKit (iOS 3.1+);
-/// `layer.borderColor` / `layer.borderWidth` are standard `CALayer` properties.
-/// This file cannot be compiled on Linux — macOS CI validates it.
+/// UIKit/CALayer assumptions:
+/// - `CADisplayLink(target:selector:)` + `.add(to: .main, forMode: .common)` —
+///   standard UIKit (iOS 3.1+).
+/// - `CALayer` sublayer with `borderColor`, `borderWidth`, `cornerRadius`,
+///   `shadowColor`, `shadowRadius`, `shadowOpacity`, `shadowOffset` — standard
+///   `CALayer` properties available since iOS 2.0.
+/// - This file cannot be compiled on Linux; macOS CI validates it.
 final class BellHaloView: UIView {
     // MARK: - Configuration
 
-    /// Halo border inset from the view edges (points).
+    /// Inset from the view edge where the glow sublayer is placed (points).
     private static let borderInset: CGFloat = 2
+    /// Width of the glow border drawn on the sublayer.
     private static let borderWidth: CGFloat = 3
+    /// Corner radius of the glow sublayer — rounds the inner ring slightly.
+    private static let cornerRadius: CGFloat = 4
+    /// Blur radius for the shadow that gives the glow its soft look.
+    private static let glowRadius: CGFloat = 6
 
     private var machine: BellStateMachine = BellStateMachine()
     private var displayLink: CADisplayLink?
+
+    /// Sublayer that carries the border glow, inset from the view edges.
+    private let glowLayer = CALayer()
 
     // MARK: - Init
 
@@ -45,17 +59,36 @@ final class BellHaloView: UIView {
         isUserInteractionEnabled = false   // pass-through; never intercepts touches
         backgroundColor = .clear
         alpha = 0
-        layer.borderWidth = Self.borderWidth
-        layer.borderColor = UIColor.clear.cgColor
+
+        glowLayer.borderWidth = Self.borderWidth
+        glowLayer.borderColor = UIColor.clear.cgColor
+        glowLayer.cornerRadius = Self.cornerRadius
+        glowLayer.backgroundColor = UIColor.clear.cgColor
+        // Shadow gives the border a soft outward glow rather than a hairline edge.
+        glowLayer.shadowOpacity = 0.85
+        glowLayer.shadowRadius = Self.glowRadius
+        glowLayer.shadowOffset = .zero
+        glowLayer.shadowColor = UIColor.clear.cgColor
+
+        layer.addSublayer(glowLayer)
+    }
+
+    // MARK: - Layout
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let inset = Self.borderInset
+        glowLayer.frame = bounds.insetBy(dx: inset, dy: inset)
     }
 
     // MARK: - API
 
-    /// Set the halo border color from the active theme.
+    /// Set the halo glow color from the active theme.
     ///
     /// - Parameter color: Resolved `UIColor` from `theme.bell.edge`.
     func configure(color: UIColor) {
-        layer.borderColor = color.cgColor
+        glowLayer.borderColor = color.cgColor
+        glowLayer.shadowColor = color.cgColor
     }
 
     /// Register a new bell ring and arm (or re-arm) the display link.
