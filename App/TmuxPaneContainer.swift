@@ -21,8 +21,14 @@ struct TmuxPaneContainer: UIViewRepresentable {
     var osc52Allowed: Bool = true
     /// Called with the sanitized OSC 0/2 title; routes to `vm.terminalTitle`.
     var onTitle: ((String) -> Void)? = nil
+    /// Called with debounced (cols, rows) when terminal grid size changes; routes to tmux client-size.
+    var onTmuxResize: ((Int, Int) -> Void)? = nil
 
-    func makeCoordinator() -> Coordinator { Coordinator(send: send, theme: theme, osc52Allowed: osc52Allowed, onTitle: onTitle) }
+    func makeCoordinator() -> Coordinator {
+        let c = Coordinator(send: send, theme: theme, osc52Allowed: osc52Allowed, onTitle: onTitle)
+        c.onTmuxResize = onTmuxResize
+        return c
+    }
 
     func makeUIView(context: Context) -> ContainerView {
         let v = ContainerView()
@@ -34,8 +40,13 @@ struct TmuxPaneContainer: UIViewRepresentable {
         uiView.apply(state: state, register: register, unregister: unregister,
                      activeBorderColor: UIColor(Color(theme.focus.paneBorder)),
                      inactiveBorderColor: UIColor(Color(theme.focus.paneBorderInactive)))
-        // Refresh halo color on theme changes.
+        // Refresh halo and dot colors on theme changes.
         context.coordinator.bellHaloColor = UIColor(Color(theme.bell.edge))
+        context.coordinator.accentDotColor = UIColor(Color(theme.accent.primary.alpha(0.40)))
+        // Keep the resize callback current (parent may re-create the closure).
+        context.coordinator.onTmuxResize = onTmuxResize
+        // Update mouse-active dot visibility and selection gesture state for all panes.
+        context.coordinator.updateMouseDots(for: uiView.panes)
     }
 
     /// Bridges SwiftTerm input from whichever pane is active to the VM.
@@ -46,9 +57,17 @@ struct TmuxPaneContainer: UIViewRepresentable {
         private var bellMachines: [ObjectIdentifier: BellStateMachine] = [:]
         /// Per-pane halo views (installed as subviews on each TerminalView).
         private var haloViews: [ObjectIdentifier: BellHaloView] = [:]
+        /// Per-pane mouse-active dot views (4pt, accent primary @ 40% opacity).
+        private var mouseDots: [ObjectIdentifier: UIView] = [:]
+        /// Per-pane selection long-press gesture recognizers. Suspended while mouse mode is active.
+        var selectionLongPresses: [ObjectIdentifier: UILongPressGestureRecognizer] = [:]
         /// Current bell halo color, refreshed from the theme in updateUIView.
         var bellHaloColor: UIColor {
             didSet { haloViews.values.forEach { $0.configure(color: bellHaloColor) } }
+        }
+        /// Current accent primary color for mouse dots, refreshed from the theme in updateUIView.
+        var accentDotColor: UIColor {
+            didSet { mouseDots.values.forEach { $0.backgroundColor = accentDotColor } }
         }
         /// Whether OSC 52 clipboard writes are permitted for this session.
         private let osc52Allowed: Bool
@@ -56,16 +75,21 @@ struct TmuxPaneContainer: UIViewRepresentable {
         private let onTitle: ((String) -> Void)?
         /// Called when the user taps an ssh:// link; set by the connect view to prefill the connect form.
         var onSSHLink: ((URL) -> Void)?
+        /// Debounces rapid resize events across all panes (tmux client size).
+        private var resizeDebounce: ResizeDebounce = ResizeDebounce()
+        /// Routes debounced resize to the tmux client-size command.
+        var onTmuxResize: ((Int, Int) -> Void)?
 
         init(send: @escaping ([UInt8]) -> Void, theme: Theme,
              osc52Allowed: Bool = true, onTitle: ((String) -> Void)? = nil) {
             self.send = send
             self.bellHaloColor = UIColor(Color(theme.bell.edge))
+            self.accentDotColor = UIColor(Color(theme.accent.primary.alpha(0.40)))
             self.osc52Allowed = osc52Allowed
             self.onTitle = onTitle
         }
 
-        // MARK: - Halo lifecycle
+        // MARK: - Halo + mouse dot lifecycle
 
         /// Called from ContainerView when a TerminalView is first created.
         func installHalo(on view: TerminalView) {
@@ -77,6 +101,15 @@ struct TmuxPaneContainer: UIViewRepresentable {
             view.addSubview(halo)
             haloViews[key] = halo
             bellMachines[key] = BellStateMachine()
+
+            // Install mouse-active indicator dot (top-left corner, fixed 4pt).
+            let dot = UIView(frame: CGRect(x: 8, y: 8, width: 4, height: 4))
+            dot.layer.cornerRadius = 2
+            dot.backgroundColor = accentDotColor
+            dot.isUserInteractionEnabled = false
+            dot.isHidden = true
+            view.addSubview(dot)
+            mouseDots[key] = dot
         }
 
         /// Called from ContainerView when a TerminalView is removed.
@@ -85,12 +118,49 @@ struct TmuxPaneContainer: UIViewRepresentable {
             haloViews[key]?.removeFromSuperview()
             haloViews[key] = nil
             bellMachines[key] = nil
+            mouseDots[key]?.removeFromSuperview()
+            mouseDots[key] = nil
+            selectionLongPresses[key] = nil
+        }
+
+        /// Poll mouse mode for each visible pane and update dot + gesture state.
+        ///
+        /// Called from `updateUIView` on each SwiftUI pass.
+        ///
+        /// - Assumption: `TerminalView.getTerminal().mouseMode` returns a value that
+        ///   compares unequal to `.off` when mouse reporting is active.
+        ///   This is the best-known SwiftTerm 1.x public API; not verifiable on Linux.
+        func updateMouseDots(for panes: [PaneID: TerminalView]) {
+            for (_, view) in panes {
+                let key = ObjectIdentifier(view)
+                let mouseActive = view.getTerminal().mouseMode != .off
+                mouseDots[key]?.isHidden = !mouseActive
+                if let gr = selectionLongPresses[key] {
+                    if mouseActive {
+                        gr.isEnabled = false
+                        // TODO(phase4): also suspend cursor-placement halo here
+                    } else {
+                        gr.isEnabled = true
+                    }
+                }
+            }
         }
 
         // MARK: - TerminalViewDelegate
 
         func send(source: TerminalView, data: ArraySlice<UInt8>) { send(Array(data)) }
-        func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}  // tmux owns geometry
+
+        // Tmux owns the visible geometry, but we still need to inform tmux of the
+        // client size so it can re-tile. Debounce rapid bursts (rotation / keyboard).
+        func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            resizeDebounce.note(cols: newCols, rows: newRows, at: Date())
+            DispatchQueue.main.asyncAfter(deadline: .now() + ResizeDebounce.quiet) { [weak self] in
+                guard let self else { return }
+                if let size = self.resizeDebounce.tick(at: Date()) {
+                    self.onTmuxResize?(size.cols, size.rows)
+                }
+            }
+        }
         func scrolled(source: TerminalView, position: Double) {}
         func setTerminalTitle(source: TerminalView, title: String) {
             if let t = sanitizeTerminalTitle(title) { onTitle?(t) }
@@ -130,7 +200,8 @@ struct TmuxPaneContainer: UIViewRepresentable {
     /// UIKit container that lays out one `TerminalView` per pane and tracks the set.
     final class ContainerView: UIView {
         weak var coordinator: Coordinator?
-        private var panes: [PaneID: TerminalView] = [:]
+        /// Pane-ID → live TerminalView; exposed for coordinator mouse-dot updates.
+        var panes: [PaneID: TerminalView] = [:]
 
         /// Cached cell metrics so we don't re-measure the font on every layout pass.
         private var cachedCell: (w: Double, h: Double)?

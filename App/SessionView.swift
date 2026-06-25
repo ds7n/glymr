@@ -43,7 +43,8 @@ struct SessionView: View {
                             send: { vm.sendTerminalInput($0) },
                             theme: theme,
                             osc52Allowed: vm.osc52Allowed,
-                            onTitle: { [weak vm] t in vm?.terminalTitle = t })
+                            onTitle: { [weak vm] t in vm?.terminalTitle = t },
+                            onTmuxResize: { [weak vm] cols, rows in vm?.setTmuxClientSize(cols: cols, rows: rows) })
                         .background(GeometryReader { geo in
                             Color.clear
                                 .onAppear { vm.sendApproxClientSize(width: geo.size.width, height: geo.size.height) }

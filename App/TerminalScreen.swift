@@ -44,6 +44,9 @@ struct TerminalScreen: UIViewRepresentable {
         halo.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         terminal.addSubview(halo)
 
+        // Install mouse-active indicator dot (top-left corner, fixed 4pt).
+        terminal.addSubview(context.coordinator.mouseDot)
+
         // Render PTY output as it arrives (already hopped to main in the bridge).
         output.onBytes = { [weak terminal] bytes in
             terminal?.feed(byteArray: bytes[...])
@@ -54,6 +57,8 @@ struct TerminalScreen: UIViewRepresentable {
     func updateUIView(_ uiView: TerminalView, context: Context) {
         // Refresh halo color when theme changes.
         context.coordinator.halo.configure(color: UIColor(Color(theme.bell.edge)))
+        // Update mouse-active dot visibility and selection gesture state.
+        context.coordinator.updateMouseDot(from: uiView)
     }
 
     /// Bridges SwiftTerm's delegate callbacks to the SSH session.
@@ -70,6 +75,15 @@ struct TerminalScreen: UIViewRepresentable {
         private let onTitle: ((String) -> Void)?
         /// Called when the user taps an ssh:// link; set by the connect view to prefill the connect form.
         var onSSHLink: ((URL) -> Void)?
+        /// Debounces rapid resize events (rotation / keyboard show-hide) into a
+        /// single remote window-change once the grid is stable for ~100ms.
+        private var resizeDebounce: ResizeDebounce = ResizeDebounce()
+        /// Mouse-active indicator dot (4pt, accent primary @ 40% opacity).
+        /// Installed as a subview of the TerminalView in makeUIView.
+        let mouseDot: UIView
+        /// Long-press gesture recognizer used for text selection. Suspended while
+        /// the terminal's mouse mode is active so mouse events reach the app.
+        var selectionLongPress: UILongPressGestureRecognizer?
 
         init(send: @escaping ([UInt8]) -> Void, session: ShellSession?, settings: TerminalSettings, theme: Theme,
              osc52Allowed: Bool = true, onTitle: ((String) -> Void)? = nil) {
@@ -79,6 +93,12 @@ struct TerminalScreen: UIViewRepresentable {
             self.halo = BellHaloView(frame: .zero)
             self.osc52Allowed = osc52Allowed
             self.onTitle = onTitle
+            let dot = UIView(frame: CGRect(x: 8, y: 8, width: 4, height: 4))
+            dot.layer.cornerRadius = 2
+            dot.backgroundColor = UIColor(Color(theme.accent.primary.alpha(0.40)))
+            dot.isUserInteractionEnabled = false
+            dot.isHidden = true
+            self.mouseDot = dot
             super.init()
             halo.configure(color: UIColor(Color(theme.bell.edge)))
         }
@@ -88,10 +108,37 @@ struct TerminalScreen: UIViewRepresentable {
             onSend(Array(data))
         }
 
-        // Grid resize (rotation, layout) → remote window-change.
+        // Grid resize (rotation, layout) → remote window-change, debounced.
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {
+            resizeDebounce.note(cols: newCols, rows: newRows, at: Date())
             let session = self.session
-            Task { try? await session?.resize(cols: UInt32(newCols), rows: UInt32(newRows)) }
+            DispatchQueue.main.asyncAfter(deadline: .now() + ResizeDebounce.quiet) { [weak self] in
+                guard let self else { return }
+                if let size = self.resizeDebounce.tick(at: Date()) {
+                    Task { try? await session?.resize(cols: UInt32(size.cols), rows: UInt32(size.rows)) }
+                }
+            }
+        }
+
+        /// Poll mouse mode from the terminal and update dot visibility / gesture state.
+        ///
+        /// Called from `updateUIView` on each SwiftUI pass. Best-effort: if SwiftTerm
+        /// changes the `mouseMode` API this will need updating.
+        ///
+        /// - Assumption: `TerminalView.getTerminal().mouseMode` returns a value that
+        ///   compares unequal to `.off` (or equivalent) when mouse reporting is active.
+        ///   This is the best-known SwiftTerm 1.x public API; not verifiable on Linux.
+        func updateMouseDot(from terminalView: TerminalView) {
+            let mouseActive = terminalView.getTerminal().mouseMode != .off
+            mouseDot.isHidden = !mouseActive
+            if let gr = selectionLongPress {
+                if mouseActive {
+                    gr.isEnabled = false
+                    // TODO(phase4): also suspend cursor-placement halo here
+                } else {
+                    gr.isEnabled = true
+                }
+            }
         }
 
         // Visual bell: pulse halo + optional haptic (throttled by BellStateMachine).
