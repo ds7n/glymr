@@ -33,6 +33,9 @@ struct TmuxPaneContainer: UIViewRepresentable {
     func makeUIView(context: Context) -> ContainerView {
         let v = ContainerView()
         v.coordinator = context.coordinator
+        // Wire the coordinator's cache-invalidation hook so a pinch font change
+        // forces pane-rect metrics to recompute on the next layout pass.
+        context.coordinator.onInvalidateCachedCell = { [weak v] in v?.invalidateCachedCell() }
         return v
     }
 
@@ -61,6 +64,13 @@ struct TmuxPaneContainer: UIViewRepresentable {
         private var mouseDots: [ObjectIdentifier: UIView] = [:]
         /// Per-pane selection long-press gesture recognizers. Suspended while mouse mode is active.
         var selectionLongPresses: [ObjectIdentifier: UILongPressGestureRecognizer] = [:]
+        /// Per-pane pinch-zoom gesture recognizers keyed by TerminalView identity.
+        private var pinchRecognizers: [ObjectIdentifier: UIPinchGestureRecognizer] = [:]
+        /// Baseline font size for pinch-zoom; shared across all panes in this window.
+        /// Updated on `.ended`; persists for the window's lifetime only (not stored to host — v1.5+).
+        var baseFontSize: Double = TerminalSettings().fontSize
+        /// Called after a pinch font change to invalidate `ContainerView.cachedCell`.
+        var onInvalidateCachedCell: (() -> Void)?
         /// Current bell halo color, refreshed from the theme in updateUIView.
         var bellHaloColor: UIColor {
             didSet { haloViews.values.forEach { $0.configure(color: bellHaloColor) } }
@@ -110,6 +120,14 @@ struct TmuxPaneContainer: UIViewRepresentable {
             dot.isHidden = true
             view.addSubview(dot)
             mouseDots[key] = dot
+
+            // Attach pinch-to-zoom gesture (shared baseline across all panes).
+            let pinch = UIPinchGestureRecognizer(
+                target: self,
+                action: #selector(handlePinch(_:))
+            )
+            view.addGestureRecognizer(pinch)
+            pinchRecognizers[key] = pinch
         }
 
         /// Called from ContainerView when a TerminalView is removed.
@@ -121,6 +139,51 @@ struct TmuxPaneContainer: UIViewRepresentable {
             mouseDots[key]?.removeFromSuperview()
             mouseDots[key] = nil
             selectionLongPresses[key] = nil
+            if let pinch = pinchRecognizers[key] {
+                view.removeGestureRecognizer(pinch)
+                pinchRecognizers[key] = nil
+            }
+        }
+
+        /// Handles pinch-to-zoom across all panes. The baseline (`baseFontSize`) is
+        /// shared so all panes stay at the same point size. On `.changed`, applies the
+        /// clamped size to every live pane and resets `scale` to 1 so deltas compound
+        /// correctly. On `.ended`, commits the final `baseFontSize` and resets scale.
+        ///
+        /// After each font change `onInvalidateCachedCell` is called so
+        /// `ContainerView.resolvedCell()` re-measures on the next layout pass.
+        ///
+        /// - Assumption: `TerminalView.font` is a settable `UIFont` property (public in
+        ///   SwiftTerm 1.x). Setting it replaces the terminal's monospace font immediately.
+        ///   Not verifiable on Linux; macOS CI is the correctness gate.
+        @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+            guard let tappedView = recognizer.view as? TerminalView else { return }
+            switch recognizer.state {
+            case .changed:
+                let newSize = TerminalSettings.clampFont(baseFontSize * Double(recognizer.scale))
+                let font = UIFont.monospacedSystemFont(ofSize: CGFloat(newSize), weight: .regular)
+                // Apply to the pane being pinched immediately; apply to all registered
+                // panes so the window stays visually consistent.
+                for view in pinchRecognizers.keys.compactMap({ paneView(for: $0) }) {
+                    view.font = font
+                }
+                tappedView.font = font   // fallback: ensure the direct pane is always updated
+                recognizer.scale = 1
+                baseFontSize = newSize
+                onInvalidateCachedCell?()
+            case .ended:
+                baseFontSize = TerminalSettings.clampFont(baseFontSize)
+                recognizer.scale = 1
+                onInvalidateCachedCell?()
+            default:
+                break
+            }
+        }
+
+        /// Returns the TerminalView associated with an ObjectIdentifier, by scanning
+        /// pinch recognizers for their attached view. Used to fan out font changes.
+        private func paneView(for key: ObjectIdentifier) -> TerminalView? {
+            pinchRecognizers[key]?.view as? TerminalView
         }
 
         /// Poll mouse mode for each visible pane and update dot + gesture state.
@@ -204,7 +267,13 @@ struct TmuxPaneContainer: UIViewRepresentable {
         var panes: [PaneID: TerminalView] = [:]
 
         /// Cached cell metrics so we don't re-measure the font on every layout pass.
+        /// Nil'd by `invalidateCachedCell()` after a pinch font change.
         private var cachedCell: (w: Double, h: Double)?
+
+        /// Clears the cached cell metrics so `resolvedCell()` re-measures on the next
+        /// layout pass. Called by the coordinator's `onInvalidateCachedCell` hook after
+        /// a pinch-zoom font change, ensuring pane rects reflect the new font geometry.
+        func invalidateCachedCell() { cachedCell = nil }
 
         /// Cell metrics derived from a registered terminal's font (monospace → uniform cell).
         ///

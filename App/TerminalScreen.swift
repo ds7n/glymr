@@ -47,6 +47,14 @@ struct TerminalScreen: UIViewRepresentable {
         // Install mouse-active indicator dot (top-left corner, fixed 4pt).
         terminal.addSubview(context.coordinator.mouseDot)
 
+        // Attach pinch-to-zoom gesture. Scale is applied live on .changed and
+        // committed to coordinator.baseSize on .ended; not persisted to the host.
+        let pinch = UIPinchGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePinch(_:))
+        )
+        terminal.addGestureRecognizer(pinch)
+
         // Render PTY output as it arrives (already hopped to main in the bridge).
         output.onBytes = { [weak terminal] bytes in
             terminal?.feed(byteArray: bytes[...])
@@ -84,12 +92,16 @@ struct TerminalScreen: UIViewRepresentable {
         /// Long-press gesture recognizer used for text selection. Suspended while
         /// the terminal's mouse mode is active so mouse events reach the app.
         var selectionLongPress: UILongPressGestureRecognizer?
+        /// Baseline font size for pinch-zoom; updated when a pinch gesture ends.
+        /// Persists for the window's lifetime only (not stored to the host — v1.5+).
+        var baseSize: Double
 
         init(send: @escaping ([UInt8]) -> Void, session: ShellSession?, settings: TerminalSettings, theme: Theme,
              osc52Allowed: Bool = true, onTitle: ((String) -> Void)? = nil) {
             self.onSend = send
             self.session = session
             self.settings = settings
+            self.baseSize = settings.fontSize
             self.halo = BellHaloView(frame: .zero)
             self.osc52Allowed = osc52Allowed
             self.onTitle = onTitle
@@ -101,6 +113,34 @@ struct TerminalScreen: UIViewRepresentable {
             self.mouseDot = dot
             super.init()
             halo.configure(color: UIColor(Color(theme.bell.edge)))
+        }
+
+        /// Handles pinch-to-zoom on the TerminalView.
+        ///
+        /// On `.changed`: applies `clampFont(baseSize * scale)` so the font tracks
+        /// the live pinch ratio; scale is reset to 1 each frame so deltas compound
+        /// correctly. On `.ended`: commits the final size back into `baseSize` and
+        /// resets `recognizer.scale` to 1.
+        ///
+        /// - Assumption: `TerminalView.font` is a settable `UIFont` property (public
+        ///   in SwiftTerm 1.x). Setting it replaces the terminal's monospace font
+        ///   immediately. Cannot be verified on Linux; macOS CI is the correctness gate.
+        @objc func handlePinch(_ recognizer: UIPinchGestureRecognizer) {
+            guard let terminal = recognizer.view as? TerminalView else { return }
+            switch recognizer.state {
+            case .changed:
+                let newSize = TerminalSettings.clampFont(baseSize * Double(recognizer.scale))
+                terminal.font = UIFont.monospacedSystemFont(ofSize: CGFloat(newSize), weight: .regular)
+                recognizer.scale = 1
+                baseSize = newSize
+            case .ended:
+                // baseSize is already up-to-date from the .changed accumulation above;
+                // re-clamp and reset scale defensively.
+                baseSize = TerminalSettings.clampFont(baseSize)
+                recognizer.scale = 1
+            default:
+                break
+            }
         }
 
         // Keystrokes / pasted bytes from the user → remote (tmux or raw PTY).
