@@ -25,7 +25,7 @@ final class PaneContextMachineTests: XCTestCase {
         _ = m.observe("python", at: 0.1)             // restart with new candidate
         XCTAssertFalse(m.observe("python", at: 0.34)) // only 0.24 since restart
         XCTAssertNil(m.engagedContext)
-        XCTAssertTrue(m.observe("python", at: 0.35))  // 0.25 since restart → engage python
+        XCTAssertTrue(m.observe("python", at: 0.40))  // 0.30 since restart (>= 0.25) → engage python
         XCTAssertEqual(m.engagedContext, "python")
     }
 
