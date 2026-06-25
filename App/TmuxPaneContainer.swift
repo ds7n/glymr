@@ -17,8 +17,12 @@ struct TmuxPaneContainer: UIViewRepresentable {
     /// Active-pane keystrokes/paste bytes → remote.
     let send: ([UInt8]) -> Void
     let theme: Theme
+    /// Whether OSC 52 clipboard writes are allowed for this session (resolved at connect time).
+    var osc52Allowed: Bool = true
+    /// Called with the sanitized OSC 0/2 title; routes to `vm.terminalTitle`.
+    var onTitle: ((String) -> Void)? = nil
 
-    func makeCoordinator() -> Coordinator { Coordinator(send: send, theme: theme) }
+    func makeCoordinator() -> Coordinator { Coordinator(send: send, theme: theme, osc52Allowed: osc52Allowed, onTitle: onTitle) }
 
     func makeUIView(context: Context) -> ContainerView {
         let v = ContainerView()
@@ -46,10 +50,17 @@ struct TmuxPaneContainer: UIViewRepresentable {
         var bellHaloColor: UIColor {
             didSet { haloViews.values.forEach { $0.configure(color: bellHaloColor) } }
         }
+        /// Whether OSC 52 clipboard writes are permitted for this session.
+        private let osc52Allowed: Bool
+        /// Called with sanitized OSC 0/2 title strings.
+        private let onTitle: ((String) -> Void)?
 
-        init(send: @escaping ([UInt8]) -> Void, theme: Theme) {
+        init(send: @escaping ([UInt8]) -> Void, theme: Theme,
+             osc52Allowed: Bool = true, onTitle: ((String) -> Void)? = nil) {
             self.send = send
             self.bellHaloColor = UIColor(Color(theme.bell.edge))
+            self.osc52Allowed = osc52Allowed
+            self.onTitle = onTitle
         }
 
         // MARK: - Halo lifecycle
@@ -79,9 +90,15 @@ struct TmuxPaneContainer: UIViewRepresentable {
         func send(source: TerminalView, data: ArraySlice<UInt8>) { send(Array(data)) }
         func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) {}  // tmux owns geometry
         func scrolled(source: TerminalView, position: Double) {}
-        func setTerminalTitle(source: TerminalView, title: String) {}
+        func setTerminalTitle(source: TerminalView, title: String) {
+            if let t = sanitizeTerminalTitle(title) { onTitle?(t) }
+        }
         func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
-        func clipboardCopy(source: TerminalView, content: Data) {}
+        func clipboardCopy(source: TerminalView, content: Data) {
+            if case let .write(bytes) = osc52Action(allow: osc52Allowed, content: Array(content)) {
+                UIPasteboard.general.string = String(decoding: bytes, as: UTF8.self)
+            }
+        }
         func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
         func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
 
