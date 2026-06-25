@@ -22,10 +22,10 @@ final class PaneContextMachineTests: XCTestCase {
     func testCandidateChangeRestartsEngageTimer() {
         var m = machine()
         _ = m.observe("vim", at: 0.0)
-        _ = m.observe("python", at: 0.1)             // restart with new candidate
-        XCTAssertFalse(m.observe("python", at: 0.34)) // only 0.24 since restart
-        XCTAssertNil(m.engagedContext)
-        XCTAssertTrue(m.observe("python", at: 0.40))  // 0.30 since restart (>= 0.25) → engage python
+        _ = m.observe("python", at: 1.0)              // restart with new candidate at t=1.0
+        XCTAssertFalse(m.observe("python", at: 1.24)) // 0.24 since restart (also proves it did NOT
+        XCTAssertNil(m.engagedContext)                //   engage off the original 0.0 vim start)
+        XCTAssertTrue(m.observe("python", at: 1.25))  // exactly 0.25 since restart → engage python
         XCTAssertEqual(m.engagedContext, "python")
     }
 
@@ -73,5 +73,16 @@ final class PaneContextMachineTests: XCTestCase {
         XCTAssertFalse(m.observe("python", at: 10.0)) // away from vim AND python candidate
         XCTAssertTrue(m.observe("python", at: 10.26)) // engage (0.25) beats disengage (1.5)
         XCTAssertEqual(m.engagedContext, "python")
+    }
+
+    func testUnknownProcessWhileEngagedDecaysAfterDisengageDwell() {
+        var m = machine()
+        _ = m.observe("vim", at: 0.0); _ = m.observe("vim", at: 0.25)  // engaged vim
+        XCTAssertFalse(m.observe("awk", at: 10.0))   // unknown → disengage timer starts, still engaged
+        XCTAssertEqual(m.engagedContext, "vim")
+        XCTAssertFalse(m.observe("awk", at: 11.4))   // 1.4 < 1.5 → still engaged
+        XCTAssertEqual(m.engagedContext, "vim")
+        XCTAssertTrue(m.observe("awk", at: 11.5))    // exactly 1.5 → disengage to nil
+        XCTAssertNil(m.engagedContext)
     }
 }
