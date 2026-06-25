@@ -68,6 +68,8 @@ struct TerminalScreen: UIViewRepresentable {
         private let osc52Allowed: Bool
         /// Called with sanitized OSC 0/2 title strings.
         private let onTitle: ((String) -> Void)?
+        /// Called when the user taps an ssh:// link; set by the connect view to prefill the connect form.
+        var onSSHLink: ((URL) -> Void)?
 
         init(send: @escaping ([UInt8]) -> Void, session: ShellSession?, settings: TerminalSettings, theme: Theme,
              osc52Allowed: Bool = true, onTitle: ((String) -> Void)? = nil) {
@@ -112,7 +114,15 @@ struct TerminalScreen: UIViewRepresentable {
                 UIPasteboard.general.string = String(decoding: bytes, as: UTF8.self)
             }
         }
-        func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {}
+        func requestOpenLink(source: TerminalView, link: String, params: [String: String]) {
+            guard let kind = classifyURL(link), let url = URL(string: link) else { return }
+            switch kind {
+            case .http, .https:
+                UIApplication.shared.open(url)
+            case .ssh:
+                onSSHLink?(url)
+            }
+        }
         func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
     }
 }
