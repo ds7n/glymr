@@ -9,6 +9,8 @@ final class UrlClassifyTests: XCTestCase {
         XCTAssertEqual(classifyURL("http://example.com"), .http)
         XCTAssertEqual(classifyURL("ssh://user@host"), .ssh)
         XCTAssertEqual(classifyURL("HTTPS://Example.com"), .https)   // case-insensitive
+        XCTAssertEqual(classifyURL("HTTP://example.com"), .http)
+        XCTAssertEqual(classifyURL("SSH://user@host"), .ssh)
     }
     func testRejectsDisallowedSchemes() {
         XCTAssertNil(classifyURL("mailto:a@b.com"))
@@ -22,5 +24,6 @@ final class UrlClassifyTests: XCTestCase {
         XCTAssertNil(joinWrappedURL(part1: "https://exa ", part2: "mple.com"))  // trailing space
         XCTAssertNil(joinWrappedURL(part1: "https://exa", part2: " mple.com"))  // leading space
         XCTAssertNil(joinWrappedURL(part1: "", part2: "mple.com"))
+        XCTAssertNil(joinWrappedURL(part1: "https://exa", part2: ""))
     }
 }
