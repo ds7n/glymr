@@ -354,6 +354,7 @@ final class ConnectionViewModel: ObservableObject {
         do {
             try await openRawShell(conn: conn)   // sets session/rawWriter, tmuxState=nil, state=.shell
             paneContexts = [:]
+            fnState.reset()
             paneViews.removeAll()
             pendingPaneBytes.removeAll()
             renderablePanes.removeAll()
