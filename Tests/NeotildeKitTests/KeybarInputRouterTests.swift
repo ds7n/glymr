@@ -59,4 +59,14 @@ final class KeybarInputRouterTests: XCTestCase {
         XCTAssertTrue(spy.sent.isEmpty)                  // arming alone sends nothing
         XCTAssertEqual(r.modifiers.ctrl, .armed)
     }
+
+    func testOnModifierChangeFiresOnArmAndOnKeyConsume() {
+        let (r, _) = make()
+        var changes = 0
+        r.onModifierChange = { changes += 1 }
+        r.tapCtrl()              // modifier armed → notify
+        XCTAssertEqual(changes, 1)
+        r.tapSymbol("c")         // fire() consumes the armed ctrl → notify
+        XCTAssertEqual(changes, 2)
+    }
 }

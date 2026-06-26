@@ -58,12 +58,14 @@ final class ConnectionViewModel: ObservableObject {
     /// Shared output sink; the terminal view wires `onBytes` to render into itself.
     let output = TerminalShellOutput()
 
-    /// Routes keybar gesture events to terminal bytes. Cursor-key mode is
-    /// best-effort `false` in v1 (the per-pane DECCKM read is a 4b refinement);
-    /// most apps accept normal-mode arrows.
-    private(set) lazy var keybar = KeybarInputRouter(
-        applicationCursorKeys: { false },
-        send: { [weak self] bytes in self?.sendTerminalInput(bytes) })
+    /// Routes keybar gesture events to terminal bytes. Modifier-state changes
+    /// publish through the VM so the keybar's armed/locked slot visuals re-render.
+    private(set) lazy var keybar: KeybarInputRouter = {
+        let r = KeybarInputRouter(applicationCursorKeys: { false },
+                                  send: { [weak self] bytes in self?.sendTerminalInput(bytes) })
+        r.onModifierChange = { [weak self] in self?.objectWillChange.send() }
+        return r
+    }()
 
     // MARK: - Host-key prompt
 

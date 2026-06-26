@@ -18,11 +18,15 @@ public final class KeybarInputRouter {
     /// Current arming state, for the UI to render armed/locked slot visuals.
     public var modifiers: ModifierState { state }
 
+    /// Fired after any change to the modifier state so an observing UI can
+    /// re-render the armed/locked slot visuals. Nil by default (tests opt in).
+    public var onModifierChange: (() -> Void)?
+
     // Modifier gestures (no keystroke emitted).
-    public func tapCtrl()       { state.tapCtrl() }
-    public func doubleTapCtrl() { state.lockCtrl() }
-    public func armAlt()        { state.armAlt() }
-    public func armShift()      { state.armShift() }
+    public func tapCtrl()       { state.tapCtrl(); onModifierChange?() }
+    public func doubleTapCtrl() { state.lockCtrl(); onModifierChange?() }
+    public func armAlt()        { state.armAlt(); onModifierChange?() }
+    public func armShift()      { state.armShift(); onModifierChange?() }
 
     // Keystroke gestures.
     public func tapSymbol(_ c: Character) { fire(.char(c)) }
@@ -35,5 +39,6 @@ public final class KeybarInputRouter {
                               applicationCursorKeys: applicationCursorKeys())
         send(bytes)
         state.consumeAfterKeystroke()
+        onModifierChange?()
     }
 }
