@@ -55,6 +55,18 @@ final class ThemeCatalogTests: XCTestCase {
         XCTAssertEqual(applied.id, ThemeID("neonMidnight"))
     }
 
+    // Injection contract: fallback uses catalog[0] from the injected catalog, not global default.
+    func testResolveDescriptorInjectedCatalogFallbackHonored() {
+        let customCatalog: [ThemeDescriptor] = [
+            ThemeDescriptor(id: ThemeID("customFree"), displayName: "Custom Free",
+                            isPro: false, theme: .bellBronze),
+            ThemeDescriptor(id: ThemeID("customPro"), displayName: "Custom Pro",
+                            isPro: true, theme: .neonMidnight),
+        ]
+        let result = resolveDescriptor(selectedID: ThemeID("unknown"), isPro: false, catalog: customCatalog)
+        XCTAssertEqual(result.id, ThemeID("customFree"))
+    }
+
     func testThemeIDCodableRoundTrip() throws {
         let original = ThemeID("bellBronze")
         let data = try JSONEncoder().encode(original)

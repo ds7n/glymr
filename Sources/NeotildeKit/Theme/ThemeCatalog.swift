@@ -49,10 +49,10 @@ public func resolveDescriptor(
     catalog: [ThemeDescriptor] = Theme.catalog
 ) -> ThemeDescriptor {
     guard let descriptor = catalog.first(where: { $0.id == selectedID }) else {
-        return Theme.defaultDescriptor
+        return catalog[0]
     }
     if descriptor.isPro && !isPro {
-        return Theme.defaultDescriptor
+        return catalog[0]
     }
     return descriptor
 }
