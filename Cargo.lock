@@ -1158,7 +1158,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "neotilde-ssh-core"
+name = "semicolyn-ssh-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
