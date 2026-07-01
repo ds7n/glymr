@@ -393,7 +393,6 @@ struct TmuxPaneContainer: UIViewRepresentable {
             for rect in rects {
                 let view = panes[rect.pane] ?? {
                     let t = TerminalView(frame: .zero)
-                    applyPalette(theme.terminalPalette(), to: t)
                     t.terminalDelegate = coordinator
                     // Apply configured font so rendered pane matches the pinch baseline.
                     if let fontSize = coordinator?.settings.fontSize {
