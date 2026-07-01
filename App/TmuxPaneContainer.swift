@@ -54,6 +54,10 @@ struct TmuxPaneContainer: UIViewRepresentable {
         context.coordinator.bellHaloColor = UIColor(Color(theme.bell.edge))
         context.coordinator.accentDotColor = UIColor(Color(theme.accent.primary.alpha(0.40)))
         context.coordinator.cursorHaloColor = UIColor(Color(theme.accent.primary))
+        // Recolor every live pane when the theme changes.
+        for pane in uiView.paneTerminalViews {
+            applyPalette(theme.terminalPalette(), to: pane)
+        }
         // Keep the resize callback current (parent may re-create the closure).
         context.coordinator.onTmuxResize = onTmuxResize
         // Update mouse-active dot visibility and selection gesture state for all panes.
@@ -328,6 +332,9 @@ struct TmuxPaneContainer: UIViewRepresentable {
         /// a pinch-zoom font change, ensuring pane rects reflect the new font geometry.
         func invalidateCachedCell() { cachedCell = nil }
 
+        /// All live pane terminal views; used by `updateUIView` to re-apply the theme palette.
+        var paneTerminalViews: [TerminalView] { Array(panes.values) }
+
         /// On every layout pass (rotation, keyboard show-hide, font change) report the
         /// full-container cell grid to tmux as the client size. Uses the measured cell
         /// metrics, so it's accurate for any font — the single source that supersedes
@@ -386,6 +393,7 @@ struct TmuxPaneContainer: UIViewRepresentable {
             for rect in rects {
                 let view = panes[rect.pane] ?? {
                     let t = TerminalView(frame: .zero)
+                    applyPalette(theme.terminalPalette(), to: t)
                     t.terminalDelegate = coordinator
                     // Apply configured font so rendered pane matches the pinch baseline.
                     if let fontSize = coordinator?.settings.fontSize {
