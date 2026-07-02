@@ -22,7 +22,7 @@ jobs:
     # Stays inert until you set the repo variable TESTFLIGHT_ENABLED=true (Settings →
     # Secrets and variables → Actions → Variables). Until then this job is skipped.
     if: vars.TESTFLIGHT_ENABLED == 'true'
-    runs-on: macos-14   # Apple Silicon + Xcode
+    runs-on: macos-15   # Apple Silicon + Xcode 26 (App Store now requires the iOS 26 SDK)
     steps:
       - uses: actions/checkout@v4
 
